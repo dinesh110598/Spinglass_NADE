@@ -22,6 +22,7 @@ class NADE_orig (tfk.Model):
         self.bias = tf.Variable (tf.zeros (shape=(self.N_h,)),
                                 trainable=True)
         self.loss_tracker = tfk.metrics.Mean(name="logits")
+
     def call (self, x):
         """Calculates the probability of sample x
         Args:
@@ -44,7 +45,7 @@ class NADE_orig (tfk.Model):
             p.append (0.5*(1-x[:,i]) + x[:,i]*y)
             #output_layer[i](h) produces the probabilty of x[i]=1
         p = tf.stack (p, axis=-1)
-        return tf.reduce_prod (p, axis=-1)
+        return tf.reduce_mean (p, axis=-1)
         #Above quantity is the joint probability of the input vector x
 
     @property
@@ -81,3 +82,4 @@ class NADE_orig (tfk.Model):
         return {"loss": self.loss_tracker.result()}
 
 # %%
+tf.float64
