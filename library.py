@@ -52,16 +52,23 @@ class NADE_orig (tfk.Model):
         return tfm.reduce_mean(p.stack(), axis=0)
         #Above quantity is the joint probability of the input vector x
 
-    def sample (self):
-        x = []
+    def sample (self): #Convert lists here to TensorArrays
+
+        def SplDense(x, n):
+            """We are using this "layer" instead of regular keras Dense
+            layer to facilitate use of common kernel and bias"""
+            kernel = tf.stack(self.kernel[:n])
+            return tfk.activations.sigmoid(tf.matmul(x, kernel) + self.bias)
+
+        x = tf.TensorArray (tf.float32, size=0, dynamic_size=True)
         rng = tf.random.Generator.from_non_deterministic_state()
         prob = 1.
-        x.append (1.)
-        for i in reversed(range (self.D-1)):
-            x_tensor = tf.constant ([x])
-            prob = self.output_layer[i] (self.__SplDense (x_tensor))
-            x.append(1 if tf.random.uniform(shape=()) < prob else -1)
-        return tf.reshape (tf.constant (x), self.shape)
+        x = x.write (0, 1.)
+        for i in range (1, self.D):
+            prob = tf.squeeze(self.output_layer[i] (self.SplDense (tf.stack(x.stack()),
+                                i)))
+            x = x.write(i,1. if rng.uniform(shape=[]) < prob else -1.)
+        return tf.reshape (x.stack(), self.shape)
     
     @tf.function
     def train_step (self, x):
@@ -77,3 +84,9 @@ class NADE_orig (tfk.Model):
         self.loss_tracker.update_state (loss)
         print ("Traced")
         return self.loss_tracker.result()
+# %%
+g = tf.random.Generator.from_non_deterministic_state()
+layer = tfk.layers.Dense (1)
+x = g.normal ([10])
+print(layer (x))
+# %%
