@@ -65,7 +65,7 @@ class NADE_orig (tfk.Model):
         prob = 1.
         x = x.write (0, 1.)
         for i in range (1, self.D):
-            prob = tf.squeeze(self.output_layer[i] (self.SplDense (tf.stack(x.stack()),
+            prob = tf.squeeze(self.output_layer[i-1] (SplDense (tf.expand_dims(x.stack(),axis=0),
                                 i)))
             x = x.write(i,1. if rng.uniform(shape=[]) < prob else -1.)
         return tf.reshape (x.stack(), self.shape)
@@ -84,3 +84,4 @@ class NADE_orig (tfk.Model):
         self.loss_tracker.update_state (loss)
         print ("Traced")
         return self.loss_tracker.result()
+# %%
