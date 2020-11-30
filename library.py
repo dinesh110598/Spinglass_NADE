@@ -84,9 +84,3 @@ class NADE_orig (tfk.Model):
         self.loss_tracker.update_state (loss)
         print ("Traced")
         return self.loss_tracker.result()
-# %%
-g = tf.random.Generator.from_non_deterministic_state()
-layer = tfk.layers.Dense (1)
-x = g.normal ([10])
-print(layer (x))
-# %%
