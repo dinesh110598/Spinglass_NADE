@@ -1,6 +1,7 @@
 # %%
-import tensorflow as tf
 import tensorflow.keras as tfk
+from tensorflow import math as tfm
+import tensorflow as tf
 # %%
 class NADE_orig (tfk.Model):
     def __init__(self, inshape, num_hidden, **kwargs):
@@ -10,20 +11,22 @@ class NADE_orig (tfk.Model):
         self.N_h = num_hidden
         self.flatten = tfk.layers.Flatten ()
         self.output_layer = []
-        for _ in range(self.D-1):
+        for i in range(self.D-1):
             self.output_layer.append (tfk.layers.Dense (1,'sigmoid'))
+            self.output_layer[i].build ([self.N_h])
 
         #Implementing weight sharing between hidden layers
         rng = tf.random.Generator.from_non_deterministic_state ()
         self.kernel = []
-        for _ in range (self.D-1):
+        for i in range (self.D-1):
             self.kernel.append (tf.Variable (rng.uniform(shape=[self.N_h]),
-                                trainable=True))
+                                trainable=True, name='kernel:'+str(i)))
         self.bias = tf.Variable (tf.zeros (shape=(self.N_h,)),
                                 trainable=True)
         self.loss_tracker = tfk.metrics.Mean(name="logits")
+        self.optimizer = tfk.optimizers.SGD()
 
-    def call (self, x):
+    def call(self, x):
         """Calculates the probability of sample x
         Args:
             x (int32): Value of input lattice
@@ -34,26 +37,21 @@ class NADE_orig (tfk.Model):
             layer to facilitate use of common kernel and bias"""
             kernel = tf.stack(self.kernel[:n])
             return tfk.activations.sigmoid(tf.matmul(x, kernel) + self.bias)
-        
-        x = self.flatten (x)
-        h = 0.
-        p = []
-        p.append (tf.ones ([x.shape[0]])) #The first lattice point is fixed at +1
-        for i in range (1,self.D):
-            h = SplDense (x[:,:i], i)
-            y = tf.squeeze (self.output_layer[i-1] (h))
-            p.append (0.5*(1-x[:,i]) + x[:,i]*y)
-            #output_layer[i](h) produces the probabilty of x[i]=1
-        p = tf.stack (p, axis=-1)
-        return tf.reduce_mean (p, axis=-1)
+
+        x = self.flatten(x)
+        p = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
+        Id = tf.ones([x.shape[0]])
+        p = p.write(0, Id)
+        #The first lattice point is fixed at +1
+        for i in range(1, self.D):
+            x1 = tf.gather(x, tf.range(i), axis=1)
+            h = SplDense(x1, i)
+            y = tf.squeeze(self.output_layer[i-1](h))
+            x2 = tf.gather(x, tf.constant(i), axis=1)
+            p = p.write(i, 0.5*(Id-x2) + (x2*y))
+        return tfm.reduce_mean(p.stack(), axis=0)
         #Above quantity is the joint probability of the input vector x
 
-    @property
-    def metrics(self):
-        "Records the metrics that need to be refreshed at the end of every epoch"
-        return [self.loss_tracker]
-
-    @tf.function
     def sample (self):
         x = []
         rng = tf.random.Generator.from_non_deterministic_state()
@@ -68,7 +66,7 @@ class NADE_orig (tfk.Model):
     @tf.function
     def train_step (self, x):
         with tf.GradientTape() as tape:
-            p = self (x)
+            p = self.call (x)
             loss = -tf.math.log (p)
         # Compute gradients
         trainable_vars = self.trainable_variables
@@ -78,8 +76,4 @@ class NADE_orig (tfk.Model):
         # Updates loss metric by averaging current value with prev ones
         self.loss_tracker.update_state (loss)
         print ("Traced")
-        # Return a dict mapping metric names to current value
-        return {"loss": self.loss_tracker.result()}
-
-# %%
-tf.float64
+        return self.loss_tracker.result()
