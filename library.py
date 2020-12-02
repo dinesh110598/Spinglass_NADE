@@ -94,9 +94,14 @@ class OutputLayer (tfk.layers.Layer):
         self.bias = tf.Variable (tf.zeros([D-1]), trainable=True)
 
     def call (self, x):
-        return (tf.einsum ("ijk,kj->ij", x, self.kernel) + self.bias)
+        y = tf.einsum ("ijk,kj->ij", x, self.kernel) + self.bias
+        return tfk.activations.sigmoid (y)
 
-class NADE_orig_GPU (tfk.Model):
+    def sample (self, h, i):
+        p = tf.matmul (h, self.kernel[:,i]) + self.bias[i]
+        return tfk.activations.sigmoid (p)
+
+class NADE_fast (tfk.Model):
     def __init__(self, inshape, num_hidden, **kwargs):
         super().__init__(**kwargs)
         self.shape = inshape
@@ -116,6 +121,7 @@ class NADE_orig_GPU (tfk.Model):
         self.loss_tracker = tfk.metrics.Mean(name="logits")
         self.optimizer = tfk.optimizers.SGD()
 
+    @tf.function
     def call(self, x):
         """Calculates the probability of sample x
         Args:
@@ -130,8 +136,9 @@ class NADE_orig_GPU (tfk.Model):
 
         x = self.flatten(x)
         x0 = tf.gather (x, tf.range(self.D-1), axis=1)
-        mask = tf.broadcast_to (self.mask, x.shape[0]+self.mask.shape)
-        x1 = tf.broadcast_to(tf.expand_dims(x0,1), x.shape+x.shape[1])
+        mask = tf.broadcast_to (self.mask, [x.shape[0]]+self.mask.shape)
+        x1 = tf.broadcast_to (tf.expand_dims(x0,1),
+                             (x.shape[0],self.D-1,self.D-1))
         x1 = mask*x1
         #For each data inside batch, x1 contains a concat of all
         #dependencies of each element inside
@@ -139,10 +146,10 @@ class NADE_orig_GPU (tfk.Model):
         y = self.output_layer(h)
         x2 = tf.gather (x, tf.range(1,self.D),axis=1)
         p = 0.5*(1-x2) + (x2*y)
-        avg = tf.reduce_mean (p, axis=1)
-        return (self.D-1*avg + 1.)/self.D
+        return tf.reduce_mean (p, axis=1)
 
-    def sample(self):  # Convert lists here to TensorArrays
+    def sample(self):
+        "Draws a single sample from the distribution learned by the model"
 
         def SplDense(x, n):
             """We are using this "layer" instead of regular keras Dense
@@ -155,9 +162,9 @@ class NADE_orig_GPU (tfk.Model):
         prob = 1.
         x = x.write(0, 1.)
         for i in range(1, self.D):
-            prob = tf.squeeze(self.output_layer[i-1](SplDense(tf.expand_dims(x.stack(), axis=0),
-                                                              i)))
-            x = x.write(i, 1. if rng.uniform(shape=[]) < prob else -1.)
+            prob = SplDense(x.stack(), i)
+            prob = tf.squeeze(self.output_layer.sample (prob,i-1))
+            x = x.write(i, 1. if rng.uniform(shape=[])<prob else -1.)
         return tf.reshape(x.stack(), self.shape)
 
     @tf.function
@@ -174,18 +181,4 @@ class NADE_orig_GPU (tfk.Model):
         self.loss_tracker.update_state(loss)
         print("Traced")
         return self.loss_tracker.result()
-# %%
-g = tf.random.Generator.from_non_deterministic_state()
-x = g.uniform([20, 50, 40])
-ker = g.normal([40, 50])
-y = tf.convert_to_tensor(np.tril(np.ones((20, 20), np.float32), -1))
-y = tf.broadcast_to(y,[50,20,20])
-x1 = g.normal ([50,20])
-x1 = tf.broadcast_to(tf.expand_dims(x1,axis=1),[50,20,20])
-z = (y*x1)
-print (x1[0],z[0])
-# %%
-x1 = g.normal([10, 20])
-x2 = tf.broadcast_to(tf.expand_dims(x1, axis=1), [10, 20, 20])
-np.all (x2[:,7,:] == x1)
 # %%
