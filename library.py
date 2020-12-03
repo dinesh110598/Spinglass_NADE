@@ -89,8 +89,8 @@ class NADE_orig (tfk.Model):
 class OutputLayer (tfk.layers.Layer):
     def __init__(self, D, N_h, **kwargs):
         super().__init__(**kwargs)
-        rng = tf.random.Generator.from_non_deterministic_state()
-        self.kernel = tf.Variable (rng.uniform ([N_h, D-1]), trainable=True)
+        ker_init = tfk.initializers.glorot_uniform ()
+        self.kernel = tf.Variable (ker_init ([N_h, D-1]), trainable=True)
         self.bias = tf.Variable (tf.zeros([D-1]), trainable=True)
 
     def call (self, x):
@@ -98,7 +98,7 @@ class OutputLayer (tfk.layers.Layer):
         return tfk.activations.sigmoid (y)
 
     def sample (self, h, i):
-        p = tf.matmul (h, self.kernel[:,i]) + self.bias[i]
+        p = tf.einsum ("ij,j->i",h, self.kernel[:,i]) + self.bias[i]
         return tfk.activations.sigmoid (p)
 
 class NADE_fast (tfk.Model):
@@ -112,11 +112,11 @@ class NADE_fast (tfk.Model):
                                         ,np.float32)))
         self.output_layer = OutputLayer (self.D, self.N_h)
 
-        #Implementing weight sharing between hidden layers
-        rng = tf.random.Generator.from_non_deterministic_state()
-        self.kernel = tf.Variable(rng.uniform(shape=[self.D-1,self.N_h]),
+        #We use glorot uniform to initialize the layer
+        ker_init = tfk.initializers.glorot_uniform ()
+        self.kernel = tf.Variable(ker_init ([self.D-1,self.N_h]),
                                 trainable=True)
-        self.bias = tf.Variable(rng.uniform(shape=[self.N_h,]),
+        self.bias = tf.Variable(tf.zeros(shape=[self.N_h,]),
                                 trainable=True)
         self.loss_tracker = tfk.metrics.Mean(name="logits")
         self.optimizer = tfk.optimizers.SGD()
@@ -154,7 +154,7 @@ class NADE_fast (tfk.Model):
         def SplDense(x, n):
             """We are using this "layer" instead of regular keras Dense
             layer to facilitate use of common kernel and bias"""
-            kernel = tf.stack(self.kernel[:n])
+            kernel = tf.gather (self.kernel, tf.range(n), axis=0)
             return tfk.activations.sigmoid(tf.matmul(x, kernel) + self.bias)
 
         x = tf.TensorArray(tf.float32, size=0, dynamic_size=True)
@@ -162,7 +162,7 @@ class NADE_fast (tfk.Model):
         prob = 1.
         x = x.write(0, 1.)
         for i in range(1, self.D):
-            prob = SplDense(x.stack(), i)
+            prob = SplDense(tf.expand_dims(x.stack(), axis=0), i)
             prob = tf.squeeze(self.output_layer.sample (prob,i-1))
             x = x.write(i, 1. if rng.uniform(shape=[])<prob else -1.)
         return tf.reshape(x.stack(), self.shape)
@@ -181,4 +181,5 @@ class NADE_fast (tfk.Model):
         self.loss_tracker.update_state(loss)
         print("Traced")
         return self.loss_tracker.result()
+
 # %%
