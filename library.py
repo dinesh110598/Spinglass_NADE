@@ -145,7 +145,7 @@ class NADE_fast (tfk.Model):
         h = SplDense(x1)
         y = self.output_layer(h)
         x2 = tf.gather (x, tf.range(1,self.D),axis=1)
-        p = 0.5*(1-x2) + (x2*y)
+        p = -tfm.log(0.5*(1-x2) + (x2*y))
         return tf.reduce_mean (p, axis=1)
 
     def sample(self):
@@ -170,8 +170,7 @@ class NADE_fast (tfk.Model):
     @tf.function
     def train_step(self, x):
         with tf.GradientTape() as tape:
-            p = self.call(x)
-            loss = -tf.math.log(p)
+            loss = self.call(x)
         # Compute gradients
         trainable_vars = self.trainable_variables
         gradients = tape.gradient(loss, trainable_vars)
