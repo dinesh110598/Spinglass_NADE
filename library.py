@@ -182,3 +182,38 @@ class NADE_fast (tfk.Model):
         return self.loss_tracker.result()
 
 # %%
+class NADE_Regularized (tfk.Model):
+    def __init__ (self, inshape, num_hidden, **kwargs):
+        "Declares constants and trainable weights of the model"
+        super().__init__ (**kwargs)
+        self.shape = inshape
+        self.D = inshape[0]*inshape[1]
+        self.N_h = num_hidden
+        self.flatten = tfk.layers.Flatten ()
+        
+        #We need the input kernel matrix to take 8 inputs and give
+        #N_h outputs, for each of the D spins
+        ker_init = tfk.initializers.glorot_uniform ()
+        self.in_kernel = tf.Variable (ker_init ([8, self.D-1, self.N_h]))
+        self.in_bias = tf.Variable (tf.zeros ([self.D-1, self.N_h]))
+
+        #We need output kernel matrix to take N_h inputs and give
+        #1 output for each of the D spins
+        self.out_kernel = tf.Variable (ker_init ([self.N_h, self.D-1]))
+        self.out_bias = tf.Variable (tf.zeros ([self.D-1]))
+        
+        #Create a constant tensor that stores the positions of the eight nearest neighbours
+        #of each of the D spins
+        spin_pos = None
+
+    def call (self, x):
+        """Takes a square 2D lattice of Ising spins as input and
+        returns its negative log probability"""
+        x = self.flatten(x)
+        x0 = None
+
+# %%
+x = np.arange (100, dtype=int)
+x = np.reshape (x, (10,10))
+print (x)
+# %%

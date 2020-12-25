@@ -1,0 +1,13 @@
+Target: New NADE class that models an autoregressive network on spins with dependencies only on nearest
+and next nearest neighbours
+
+Strategy:
+- Create a map to go between C ordered 2D positions and flattened 1D positions for a spin in
+the lattice
+- In the loss function, add terms to regularize the weights corresponding to farther spins. The
+farther the spin, more severely regularized its weight be...
+- Alter the mask variable used in NADE_fast class to include the positions of only nearby spins, which
+means one spin would depend on atmost 8 nearby spins.
+- There won't be any shared weights- each spin would have its own network acting on the restricted set
+of dependecies.
+- 
