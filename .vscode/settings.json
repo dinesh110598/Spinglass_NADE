@@ -1,4 +1,5 @@
 {
     "jupyter.jupyterServerType": "local",
-    "editor.fontSize": 14.5
+    "editor.fontSize": 14.5,
+    "python.pythonPath": "/home/dinesh/miniconda3/bin/python"
 }
