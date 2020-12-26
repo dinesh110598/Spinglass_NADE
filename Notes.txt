@@ -10,4 +10,4 @@ farther the spin, more severely regularized its weight be...
 means one spin would depend on atmost 8 nearby spins.
 - There won't be any shared weights- each spin would have its own network acting on the restricted set
 of dependecies.
-- 
+- Is it feasible to create input kernel variables individually for each of the D-1 spins?
